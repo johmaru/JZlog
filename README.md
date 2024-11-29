@@ -4,7 +4,7 @@ No dependent Simple zig logging library
 
 ## how to install
 
-```zig fetch --save https://github.com/johmaru/JZlog/archive/refs/tags/v0.0.1.zip```
+```zig fetch --save https://github.com/johmaru/JZlog/archive/refs/tags/v0.0.2.zip```
 
 edit build.zig
 
