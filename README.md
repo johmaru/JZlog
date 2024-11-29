@@ -4,16 +4,29 @@ No dependent Simple zig logging library
 
 ## how to install
 
+```zig fetch --save https://github.com/johmaru/JZlog/archive/refs/tags/v0.0.1.zip```
+
+edit build.zig
+
 ```zig
-// [build.zig.zon](http://_vscodecontentref_/2)
-.{
-    .dependencies = .{
-        .JZlog = .{
-            .url = "https://github.com/johmaru/JZlog/archive/refs/tags/v0.0.1.zip",
-            .hash = "88CCE0DC4195F1BE22F4469D485D85ACE53898C0603BD2A5568C99E790FE1A2A",
-        },
-    },
-}
+    const jzlog_dep = b.dependency("JZlog", .{});
+    const jzlog_module = jzlog_dep.module("JZlog");
+
+    //Under
+    //const exe = b.addExecutable(.{
+      //  .name = "test_log",
+      //  .root_source_file = b.path("src/main.zig"),
+      //  .target = target,
+      //  .optimize = optimize,
+    // });
+
+    exe.root_module.addImport("JZlog", jzlog_module);
+```
+
+main.zig
+
+```zig
+const jz_log = @import("JZlog");
 ```
 
 ## how to use
