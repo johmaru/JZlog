@@ -1,6 +1,6 @@
 # JZlog
 
-Simple zig logging library
+No dependent Simple zig logging library
 
 ## how to install
 
