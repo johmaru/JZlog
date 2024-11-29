@@ -2,6 +2,8 @@
 
 No dependent Simple zig logging library
 
+library v 0.0.2 on zig version 0.13.0
+
 ## how to install
 
 ```zig fetch --save https://github.com/johmaru/JZlog/archive/refs/tags/v0.0.2.zip```
