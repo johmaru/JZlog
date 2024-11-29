@@ -28,23 +28,23 @@ pub fn build(b: *std.Build) void {
 
     const lib = b.addStaticLibrary(.{
         .name = "JZlog",
-        .root_source_file = .{ .path = "src/logger.zig" },
+        .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/logger.zig" } },
         .target = target,
         .optimize = optimize,
     });
 
     const module = b.addModule("JZlog", .{
-        .source_file = .{ .path = "src/logger.zig" },
+        .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/logger.zig" } },
     });
 
     for (examples) |example| {
         const exe = b.addExecutable(.{
             .name = example,
-            .root_source_file = .{ .path = b.fmt("examples/{s}.zig", .{example}) },
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/logger.zig" } },
             .target = target,
             .optimize = optimize,
         });
-        exe.addModule("JZlog", module);
+        exe.root_module.addImport("JZlog", module);
         b.installArtifact(exe);
     }
 

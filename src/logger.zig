@@ -5,28 +5,64 @@ const is_debug = @import("builtin").mode == .Debug;
 
 const Logger = struct {
     log_msg: []const u8,
-    log_level: []const u8,
-    log_time: i64,
+    log_level: LogLevel,
+    log_time: []const u8,
 };
 
-pub const LogLevel = enum {
-    Debug,
-    Info,
-    Warning,
-    Error,
+pub const LogLevel = enum(u8) {
+    Debug = 0,
+    Info = 1,
+    Warning = 2,
+    Error = 3,
+};
+
+pub const LogLevelContent = struct {
+    loglevel: LogLevel,
+    loglevel_str: []const u8,
+};
+
+pub const LogLevel_struct = [_]LogLevelContent{
+    .{
+        .loglevel = LogLevel.Debug,
+        .loglevel_str = "Debug",
+    },
+    .{
+        .loglevel = LogLevel.Info,
+        .loglevel_str = "Info",
+    },
+    .{
+        .loglevel = LogLevel.Warning,
+        .loglevel_str = "Warning",
+    },
+    .{
+        .loglevel = LogLevel.Error,
+        .loglevel_str = "Error",
+    },
+};
+
+pub const LogConfig = struct {
+    min_level: LogLevel = LogLevel.Debug,
 };
 
 pub const LogTime = enum { Include_h_s_m_s, y_m_d };
+
+var LogConfig_content: LogConfig = .{
+    .min_level = LogLevel.Debug,
+};
 
 var log_time: i64 = undefined;
 
 var time_format: LogTime = LogTime.Include_h_s_m_s;
 
-pub fn Init(logtime: ?LogTime) !void {
+pub fn init(logtime: ?LogTime, logconfig: ?LogConfig) !void {
     // main allocation
     const allocator = std.heap.page_allocator;
 
     log_time = time.timestamp();
+
+    if (logconfig) |cfg| {
+        LogConfig_content = cfg;
+    }
 
     switch (builtin.os.tag) {
         .windows => {
@@ -81,26 +117,12 @@ fn get_log_file_path() ![]const u8 {
 
             switch (time_format) {
                 LogTime.Include_h_s_m_s => {
-                    const date = getDateAll(log_time);
-                    const time_str = try std.fmt.allocPrint(allocator, "{d}-{d:0>2}-{d:0>2}-{d:0>2}-{d:0>2}-{d:0>2}", .{
-                        date.year,
-                        date.month,
-                        date.day,
-                        date.hour,
-                        date.minute,
-                        date.second,
-                    });
+                    const time_str = try time_format_content();
                     defer allocator.free(time_str);
-
                     return try std.fs.path.join(allocator, &[_][]const u8{ log_path, try std.fmt.allocPrint(allocator, "{s}-log.txt", .{time_str}) });
                 },
                 LogTime.y_m_d => {
-                    const date = getDateOnly(log_time);
-                    const time_str = try std.fmt.allocPrint(allocator, "{d}-{d:0>2}-{d:0>2}", .{
-                        date.year,
-                        date.month,
-                        date.day,
-                    });
+                    const time_str = try time_format_content();
                     defer allocator.free(time_str);
 
                     return try std.fs.path.join(allocator, &[_][]const u8{ log_path, try std.fmt.allocPrint(allocator, "{s}-log.txt", .{time_str}) });
@@ -114,6 +136,42 @@ fn get_log_file_path() ![]const u8 {
             return error.UnsupportedOs;
         },
     }
+}
+
+fn time_format_content() ![]const u8 {
+    switch (time_format) {
+        LogTime.Include_h_s_m_s => {
+            const date = getDateAll(log_time);
+            return try std.fmt.allocPrint(std.heap.page_allocator, "{d}-{d:0>2}-{d:0>2}-{d:0>2}-{d:0>2}-{d:0>2}", .{
+                date.year,
+                date.month,
+                date.day,
+                date.hour,
+                date.minute,
+                date.second,
+            });
+        },
+        LogTime.y_m_d => {
+            const date = getDateOnly(log_time);
+            return try std.fmt.allocPrint(std.heap.page_allocator, "{d}-{d:0>2}-{d:0>2}", .{
+                date.year,
+                date.month,
+                date.day,
+            });
+        },
+    }
+}
+
+fn log_time_format_content() ![]const u8 {
+    const date = getDateAll(log_time);
+    return try std.fmt.allocPrint(std.heap.page_allocator, "{d}-{d:0>2}-{d:0>2}-{d:0>2}-{d:0>2}-{d:0>2}", .{
+        date.year,
+        date.month,
+        date.day,
+        date.hour,
+        date.minute,
+        date.second,
+    });
 }
 
 fn getDateOnly(timestamp: i64) struct { year: u16, month: u8, day: u8 } {
@@ -158,6 +216,10 @@ fn getDateAll(timestamp: i64) struct { year: u16, month: u8, day: u8, hour: u8, 
 }
 
 pub fn log(log_msg: []const u8, log_level: LogLevel) !void {
+    if (@intFromEnum(log_level) < @intFromEnum(LogConfig_content.min_level)) {
+        return;
+    }
+
     const allocator = std.heap.page_allocator;
 
     const log_file_path = try get_log_file_path();
@@ -179,28 +241,16 @@ pub fn log(log_msg: []const u8, log_level: LogLevel) !void {
 
     try log_file.seekFromEnd(0);
 
-    var log_level_init: []const u8 = undefined;
+    const str = try log_time_format_content();
+    defer allocator.free(str);
 
-    switch (log_level) {
-        LogLevel.Debug => {
-            log_level_init = "Debug";
-        },
-        LogLevel.Info => {
-            log_level_init = "Info";
-        },
-        LogLevel.Warning => {
-            log_level_init = "Warning";
-        },
-        LogLevel.Error => {
-            log_level_init = "Error";
-        },
-    }
+    const log_entry = Logger{ .log_msg = log_msg, .log_level = log_level, .log_time = str };
 
-    const log_entry = Logger{ .log_msg = log_msg, .log_level = log_level_init, .log_time = log_time };
+    const log_level_init: []const u8 = LogLevel_struct[@intFromEnum(log_level)].loglevel_str;
 
-    const log_str = try std.fmt.allocPrint(allocator, "{d} Level {s} : {s}\n", .{
+    const log_str = try std.fmt.allocPrint(allocator, "{s} Level {s} : {s}\n", .{
         log_entry.log_time,
-        @tagName(log_level),
+        log_level_init,
         log_entry.log_msg,
     });
     defer allocator.free(log_str);

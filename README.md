@@ -21,6 +21,21 @@ Simple zig logging library
 ```zig
     const JZlog = @import("JZlog");
 
-    try JZlog.Init(null); // If you want to choose time format (Y-M-D or Y-M-D-H-M-S), you can use LogTime enum types.
+    // all default
+    try JZlog.init(null,.{}); 
+
+    // If you want to choose time format (Y-M-D or Y-M-D-H-M-S), you can use LogTime enum types.
+    try logger.init(.y_m_d,.{}); 
+
+    // Include hsms
+    try logger.init(.Include_h_s_m_s,{}); 
+    
+    // also you can chose any settings your like
+     try logger.init(null,.{ .min_level = logger.LogLevel.Warning }); 
+
+
+
+
+
     try JZlog.log("Hello!", JZlog.LogLevel.Info); // This library supports various LogLevel types
 ```
