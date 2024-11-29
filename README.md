@@ -9,8 +9,8 @@ No dependent Simple zig logging library
 .{
     .dependencies = .{
         .JZlog = .{
-            .url = "",
-            .hash = "...",
+            .url = "https://github.com/johmaru/JZlog/archive/refs/tags/v0.0.1.zip",
+            .hash = "88CCE0DC4195F1BE22F4469D485D85ACE53898C0603BD2A5568C99E790FE1A2A",
         },
     },
 }
