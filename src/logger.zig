@@ -4,10 +4,23 @@ const builtin = @import("builtin");
 const is_debug = @import("builtin").mode == .Debug;
 
 const Logger = struct {
-    log_msg: []const u8,
+    logmessage: []const u8,
     log_level: LogLevel,
     log_time: []const u8,
+    allocator: std.mem.Allocator,
+
+    pub fn compare(_: void, a: Logger, b: Logger) std.math.Order {
+        const a_level = @intFromEnum(a.log_level);
+        const b_level = @intFromEnum(b.log_level);
+
+        return if (a_level < b_level) .lt else if (a_level > b_level) .gt else .eq;
+    }
 };
+
+const LogQueue = std.PriorityDequeue(Logger, void, Logger.compare);
+var log_queue: LogQueue = undefined;
+var log_thread: ?std.Thread = null;
+var queue_mutex: std.Thread.Mutex = .{};
 
 pub const LogLevel = enum(u8) {
     Debug = 0,
@@ -89,6 +102,8 @@ pub fn init(logtime: ?LogTime, logconfig: ?LogConfig) !void {
                 } else {}
             }
 
+            try create_log_file();
+
             if (logtime) |lt| {
                 time_format = lt;
             }
@@ -100,6 +115,29 @@ pub fn init(logtime: ?LogTime, logconfig: ?LogConfig) !void {
             return error.UnsupportedOs;
         },
     }
+}
+
+fn create_log_file() !void {
+    const allocator = std.heap.page_allocator;
+
+    const log_file_path = try get_log_file_path();
+    defer allocator.free(log_file_path);
+
+    if (comptime @import("builtin").mode == .Debug) {
+        std.debug.print("Log file path: {s}\n", .{log_file_path});
+    }
+
+    const dir_path = std.fs.path.dirname(log_file_path) orelse return error.InvalidPath;
+    std.fs.cwd().makeDir(dir_path) catch |err| {
+        if (err != error.PathAlreadyExists) {
+            return err;
+        }
+    };
+
+    const log_file = try std.fs.cwd().createFile(log_file_path, .{ .read = true, .truncate = false });
+    defer log_file.close();
+
+    try log_file.seekFromEnd(0);
 }
 
 fn get_log_file_path() ![]const u8 {
@@ -225,17 +263,6 @@ pub fn log(log_msg: []const u8, log_level: LogLevel) !void {
     const log_file_path = try get_log_file_path();
     defer allocator.free(log_file_path);
 
-    if (comptime @import("builtin").mode == .Debug) {
-        std.debug.print("Log file path: {s}\n", .{log_file_path});
-    }
-
-    const dir_path = std.fs.path.dirname(log_file_path) orelse return error.InvalidPath;
-    std.fs.cwd().makeDir(dir_path) catch |err| {
-        if (err != error.PathAlreadyExists) {
-            return err;
-        }
-    };
-
     const log_file = try std.fs.cwd().createFile(log_file_path, .{ .read = true, .truncate = false });
     defer log_file.close();
 
@@ -244,14 +271,14 @@ pub fn log(log_msg: []const u8, log_level: LogLevel) !void {
     const str = try log_time_format_content();
     defer allocator.free(str);
 
-    const log_entry = Logger{ .log_msg = log_msg, .log_level = log_level, .log_time = str };
+    const log_entry = Logger{ .logmessage = log_msg, .log_level = log_level, .log_time = str, .allocator = std.heap.page_allocator };
 
     const log_level_init: []const u8 = LogLevel_struct[@intFromEnum(log_level)].loglevel_str;
 
     const log_str = try std.fmt.allocPrint(allocator, "{s} Level {s} : {s}\n", .{
         log_entry.log_time,
         log_level_init,
-        log_entry.log_msg,
+        log_entry.logmessage,
     });
     defer allocator.free(log_str);
 
@@ -269,4 +296,49 @@ pub fn log(log_msg: []const u8, log_level: LogLevel) !void {
     } else |err| {
         return err;
     }
+}
+
+fn initQueue() void {
+    log_queue = LogQueue.init(std.heap.page_allocator, undefined);
+}
+
+fn logWorker() void {
+    while (true) {
+        queue_mutex.lock();
+        if (log_queue.removeMaxOrNull()) |entry| {
+            const log_entry: Logger = entry;
+            queue_mutex.unlock();
+            log(log_entry.logmessage, log_entry.log_level) catch |err| {
+                std.debug.print("Error: {any}\n", .{err});
+            };
+
+            log_entry.allocator.free(log_entry.logmessage);
+        } else {
+            queue_mutex.unlock();
+            std.time.sleep(10 * std.time.ns_per_ms);
+        }
+    }
+}
+
+pub fn asyncLog(msg: []const u8, level: LogLevel) !void {
+    if (@intFromEnum(level) < @intFromEnum(LogConfig_content.min_level)) {
+        return;
+    }
+    if (log_thread == null) {
+        initQueue();
+        log_thread = try std.Thread.spawn(.{}, logWorker, .{});
+    }
+
+    const allocator = std.heap.page_allocator;
+    const msg_copy = try allocator.dupe(u8, msg);
+
+    const str = try log_time_format_content();
+    defer allocator.free(str);
+
+    const log_entry = Logger{ .logmessage = msg_copy, .log_level = level, .log_time = str, .allocator = allocator };
+
+    queue_mutex.lock();
+    defer queue_mutex.unlock();
+
+    try log_queue.add(log_entry);
 }

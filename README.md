@@ -36,6 +36,9 @@ Simple zig logging library
 
 
 
-
+    // this is log write function
     try JZlog.log("Hello!", JZlog.LogLevel.Info); // This library supports various LogLevel types
+
+    // this library have async function
+    try logger.asyncLog("async!!", logger.LogLevel.Info);
 ```
