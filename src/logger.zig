@@ -21,6 +21,7 @@ const LogQueue = std.PriorityDequeue(Logger, void, Logger.compare);
 var log_queue: LogQueue = undefined;
 var log_thread: ?std.Thread = null;
 var queue_mutex: std.Thread.Mutex = .{};
+var is_worker_running: std.atomic.Value(bool) = .{ .raw = true };
 
 pub const LogLevel = enum(u8) {
     Debug = 0,
@@ -303,19 +304,19 @@ fn initQueue() void {
 }
 
 fn logWorker() void {
-    while (true) {
+    while (is_worker_running.load(.acquire)) {
         queue_mutex.lock();
+        defer queue_mutex.unlock();
+
         if (log_queue.removeMaxOrNull()) |entry| {
             const log_entry: Logger = entry;
-            queue_mutex.unlock();
             log(log_entry.logmessage, log_entry.log_level) catch |err| {
                 std.debug.print("Error: {any}\n", .{err});
             };
 
             log_entry.allocator.free(log_entry.logmessage);
         } else {
-            queue_mutex.unlock();
-            std.time.sleep(10 * std.time.ns_per_ms);
+            std.time.sleep(1 * std.time.ns_per_ms);
         }
     }
 }
@@ -341,4 +342,15 @@ pub fn asyncLog(msg: []const u8, level: LogLevel) !void {
     defer queue_mutex.unlock();
 
     try log_queue.add(log_entry);
+}
+
+pub fn shutdown() void {
+    if (log_thread) |thred| {
+        while (log_queue.count() > 0) {
+            std.time.sleep(10 * std.time.ns_per_ms);
+        }
+
+        is_worker_running.store(false, .release);
+        thred.join();
+    }
 }

@@ -54,4 +54,5 @@ const jz_log = @import("JZlog");
 
     // this library have async function
     try logger.asyncLog("async!!", logger.LogLevel.Info);
+    defer logger.shutdown();
 ```
