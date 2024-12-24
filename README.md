@@ -2,11 +2,13 @@
 
 No dependent Simple zig logging library
 
-library v 0.0.2 on zig version 0.13.0
+library v 0.0.3 on zig version 0.13.0
+
+※Version 0.0.3 linux supported
 
 ## how to install
 
-```zig fetch --save https://github.com/johmaru/JZlog/archive/refs/tags/v0.0.2.zip```
+```zig fetch --save https://github.com/johmaru/JZlog/archive/refs/tags/v0.0.3.zip```
 
 edit build.zig
 
