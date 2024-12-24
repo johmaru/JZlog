@@ -110,7 +110,32 @@ pub fn init(logtime: ?LogTime, logconfig: ?LogConfig) !void {
             }
         },
         .linux => {
-            std.debug.print("dev", .{});
+            var elfpath_buffer: [1024]u8 = undefined;
+            const elfpath = try std.fs.selfExePath(&elfpath_buffer);
+
+            const elf_dir = std.fs.path.dirname(elfpath) orelse return error.UnexpectedNull;
+
+            if (comptime is_debug) {
+                std.debug.print("elf_dir: {s}\n", .{elf_dir});
+            }
+
+            const log_path = try std.fs.path.join(allocator, &[_][]const u8{ elf_dir, "logs" });
+            defer allocator.free(log_path);
+
+            var dir = std.fs.cwd().openDir(log_path, .{});
+            if (dir) |*d| {
+                defer d.close();
+            } else |err| {
+                if (err == std.fs.Dir.OpenError.FileNotFound) {
+                    try std.fs.cwd().makeDir(log_path);
+                } else {}
+            }
+
+            try create_log_file();
+
+            if (logtime) |lt| {
+                time_format = lt;
+            }
         },
         else => {
             return error.UnsupportedOs;
@@ -169,7 +194,29 @@ fn get_log_file_path() ![]const u8 {
             }
         },
         .linux => {
-            return "dev";
+            const allocator = std.heap.page_allocator;
+
+            var elfpath_buffer: [1024]u8 = undefined;
+            const elfpath = try std.fs.selfExePath(&elfpath_buffer);
+
+            const elf_dir = std.fs.path.dirname(elfpath) orelse return error.UnexpectedNull;
+
+            const log_path = try std.fs.path.join(allocator, &[_][]const u8{ elf_dir, "logs" });
+            defer allocator.free(log_path);
+
+            switch (time_format) {
+                LogTime.Include_h_s_m_s => {
+                    const time_str = try time_format_content();
+                    defer allocator.free(time_str);
+                    return try std.fs.path.join(allocator, &[_][]const u8{ log_path, try std.fmt.allocPrint(allocator, "{s}-log.txt", .{time_str}) });
+                },
+                LogTime.y_m_d => {
+                    const time_str = try time_format_content();
+                    defer allocator.free(time_str);
+
+                    return try std.fs.path.join(allocator, &[_][]const u8{ log_path, try std.fmt.allocPrint(allocator, "{s}-log.txt", .{time_str}) });
+                },
+            }
         },
         else => {
             return error.UnsupportedOs;
